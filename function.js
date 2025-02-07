@@ -49,7 +49,9 @@ window.function = async function(api_key, thread_id, assistant_id, content) {
         const messagesResponse = await fetch(`${openaiEndpoint}/threads/${thread_id.value}/messages`, {
             method: "GET",
             headers: {
-                "Authorization": `Bearer ${OPENAI_API_KEY}`
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${OPENAI_API_KEY}`,
+                "OpenAI-Beta": "assistants=v2"
             }
         });
 
