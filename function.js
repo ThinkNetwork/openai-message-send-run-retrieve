@@ -18,7 +18,8 @@ window.function = async function(api_key, thread_id, assistant_id, content) {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${OPENAI_API_KEY}`
+                "Authorization": `Bearer ${OPENAI_API_KEY}`,
+                "OpenAI-Beta": "assistants=v2"
             },
             body: JSON.stringify(messagePayload)
         });
