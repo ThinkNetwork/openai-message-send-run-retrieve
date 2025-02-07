@@ -47,7 +47,37 @@ window.function = async function(api_key, thread_id, assistant_id, content) {
             throw new Error(`Run Error: ${errorData.error?.message || "Unknown error"}`);
         }
 
-        // Step 3: Retrieve the assistant's response message
+        const runData = await runResponse.json();
+        const runId = runData.id;
+
+        // Step 3: Poll until the run is completed
+        let runStatus = "queued";
+        while (runStatus !== "completed") {
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before checking status
+
+            const runStatusResponse = await fetch(`${openaiEndpoint}/threads/${thread_id.value}/runs/${runId}`, {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${OPENAI_API_KEY}`,
+                    "OpenAI-Beta": "assistants=v2"
+                }
+            });
+
+            if (!runStatusResponse.ok) {
+                const errorData = await runStatusResponse.json();
+                throw new Error(`Run Status Error: ${errorData.error?.message || "Unknown error"}`);
+            }
+
+            const runStatusData = await runStatusResponse.json();
+            runStatus = runStatusData.status;
+
+            if (runStatus === "failed") {
+                throw new Error("Run failed.");
+            }
+        }
+
+        // Step 4: Retrieve the assistant's response message
         const messagesResponse = await fetch(`${openaiEndpoint}/threads/${thread_id.value}/messages`, {
             method: "GET",
             headers: {
