@@ -1,108 +1,73 @@
-window.function = async function(api_key, endpoint, body, json) {
-  // GET VALUES FROM INPUTS, WITH DEFAULT VALUES WHERE APPLICABLE
-  const apiKey = api_key.value ?? "";
-  const endpointValue = endpoint.value ?? "";
-  const bodyValue = body.value ?? "";
-  const jsonValue = json.value ?? "";
+window.function = async function(api_key, thread_id, assistant_id, content) {
+    if (!api_key.value) return "Error: OpenAI API Key is required.";
+    if (!thread_id.value) return "Error: Thread ID is required.";
+    if (!assistant_id.value) return "Error: Assistant ID is required.";
+    if (!content.value) return "Error: Message content is required.";
 
-  // INPUT VALIDATION
-  if (!apiKey) {
-    return "Error: API Key is required.";
-  }
-  if (!endpointValue) {
-    return "Error: API Endpoint is required.";
-  }
-  if (!bodyValue) {
-    return "Error: The Body (JSON) is required.";
-  }
+    const OPENAI_API_KEY = api_key.value;
+    const openaiEndpoint = "https://api.openai.com/v1";
 
-  // INITIALIZE VARIABLE FOR BODY JSON MESSAGE
-  let bodyMessage = "";
-
-  if (bodyValue) {
-    // TRY TO PARSE THE JSON TO SEE IF IT'S VALID
     try {
-      const parsedBodyJson = JSON.parse(bodyValue);
+        // Step 1: Send a message to the thread
+        const messagePayload = {
+            role: "user",
+            content: content.value
+        };
 
-      // CHECK IF Body JSON IS EMPTY
-      if (Object.keys(parsedBodyJson).length === 0) {
-        return "Error: Invalid Body JSON Schema - Schema is empty.";
-      }
-    } catch (e) {
-      return "Error: Invalid Body JSON Schema";
-    }
+        const messageResponse = await fetch(`${openaiEndpoint}/threads/${thread_id.value}/messages`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${OPENAI_API_KEY}`
+            },
+            body: JSON.stringify(messagePayload)
+        });
 
-    // CREATE THE JSON MESSAGE
-    bodyMessage = `You must format your input as a JSON value. Your input will be parsed and type-checked according to the provided schema, so make sure all fields in your input match the schema exactly and there are no trailing commas! Do not, under any circumstances, include markdown or a markdown code-block in your response. Your response should be raw JSON only, with nothing else added.\n\nHere is the JSON Schema your input must adhere to:\n\n${bodyValue}`;
-  }
-
-  // INITIALIZE VARIABLE FOR JSON MESSAGE
-  let jsonMessage = "";
-
-  if (jsonValue) {
-    // TRY TO PARSE THE JSON TO SEE IF IT'S VALID
-    try {
-      const parsedJson = JSON.parse(jsonValue);
-
-      // CHECK IF JSON IS EMPTY
-      if (Object.keys(parsedJson).length === 0) {
-        return "Error: Invalid JSON Schema - Schema is empty.";
-      }
-    } catch (e) {
-      return "Error: Invalid JSON Schema";
-    }
-
-    // CREATE THE JSON MESSAGE
-    jsonMessage = `You must format your output as a JSON value. Your output will be parsed and type-checked according to the provided schema, so make sure all fields in your output match the schema exactly and there are no trailing commas! Do not, under any circumstances, include markdown or a markdown code-block in your response. Your response should be raw JSON only, with nothing else added.\n\nHere is the JSON Schema your output must adhere to:\n\n${jsonValue}`;
-  }
-
-  //let payload = bodyValue;
-
-  // PERFORM POST REQUEST TO OPENAI
-  try {
-    const response = await fetch(endpointValue, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'OpenAI-Beta': 'assistants=v2'
-      },
-      body: bodyValue //JSON.stringify(payload)
-    });
-
-    // IF THERE'S AN ERROR, RETURN THE ERROR MESSAGE
-    if (!response.ok) {
-      let errorMessage = `Error ${response.status} ${response.statusText}`;
-      try {
-        const errorData = await response.json();
-        if (errorData.error && errorData.error.message) {
-          errorMessage += `: ${errorData.error.message}`;
+        if (!messageResponse.ok) {
+            const errorData = await messageResponse.json();
+            throw new Error(`Message Error: ${errorData.error?.message || "Unknown error"}`);
         }
-      } catch (e) {
-        errorMessage += ": Unable to parse error details.";
-      }
-      return errorMessage;
-    }
 
-    // ELSE, PARSE THE RESPONSE
-    let data;
-    try {
-      data = await response.json();
-    } catch (e) {
-      return "Error: Failed to parse API response.";
-    }
+        // Step 2: Create a run for the assistant
+        const runPayload = { assistant_id: assistant_id.value };
 
-    // SAFELY ACCESS ASSISTANT'S MESSAGE
-    if (data.id && data.id.length > 0) {
-      const assistantMessage = data.id;
-      // RETURN THE ASSISTANT MESSAGE
-      return assistantMessage;
-    } else {
-      return "Error: Received an invalid response from the API.";
-    }
+        const runResponse = await fetch(`${openaiEndpoint}/threads/${thread_id.value}/runs`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${OPENAI_API_KEY}`
+            },
+            body: JSON.stringify(runPayload)
+        });
 
-  } catch (error) {
-    // CATCH ANY ERRORS THAT OCCUR WHILE FETCHING THE RESPONSE
-    return `Error: Request failed - ${error.message}`;
-  }
+        if (!runResponse.ok) {
+            const errorData = await runResponse.json();
+            throw new Error(`Run Error: ${errorData.error?.message || "Unknown error"}`);
+        }
+
+        // Step 3: Retrieve the assistant's response message
+        const messagesResponse = await fetch(`${openaiEndpoint}/threads/${thread_id.value}/messages`, {
+            method: "GET",
+            headers: {
+                "Authorization": `Bearer ${OPENAI_API_KEY}`
+            }
+        });
+
+        if (!messagesResponse.ok) {
+            const errorData = await messagesResponse.json();
+            throw new Error(`Messages Retrieval Error: ${errorData.error?.message || "Unknown error"}`);
+        }
+
+        const messagesData = await messagesResponse.json();
+
+        // Find the latest assistant response
+        const assistantMessage = messagesData.data
+            .filter(msg => msg.role === "assistant")
+            .pop()?.content || "No response from assistant.";
+
+        return assistantMessage;
+
+    } catch (error) {
+        return `Error: ${error.message}`;
+    }
 };
